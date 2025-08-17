@@ -1,0 +1,6 @@
+/vendor/
+/.env
+/public/resized/
+/.idea/
+/.vscode
+.DS_Store

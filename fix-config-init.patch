@@ -1,0 +1,164 @@
+*** Begin Patch
+*** Update File: src/Support/Config.php
+@@
+-<?php
+-namespace App\Support;
+-
+-final class Config {
+-  public function __construct(
+-    public array $data
+-  ) {}
+-  public function __get($k) { return $this->data[$k] ?? null; }
+-
+-  public function baseImageDir(): string { return rtrim($this->data['BASE_IMAGE_DIR'], '/'); }
+-  public function resizedDir(): string { return rtrim($this->data['RESIZED_DIR'], '/'); }
+-  public string $resizedDir;
+-  public string $baseImageDir;
+-  public string $defaultEngine;
+-  public int $defaultQuality;
+-  public string $defaultFit;
+-
+-  public function __get_magic_initialization() {
+-    $this->resizedDir = $this->resizedDir();
+-    $this->baseImageDir = $this->baseImageDir();
+-    $this->defaultEngine = $this->data['DEFAULT_ENGINE'];
+-    $this->defaultQuality = (int)$this->data['DEFAULT_QUALITY'];
+-    $this->defaultFit = $this->data['DEFAULT_FIT'];
+-  }
+-}
++<?php
++declare(strict_types=1);
++
++namespace App\Support;
++
++/**
++ * Strongly-initialized config with safe getters.
++ */
++final class Config {
++  private array $data;
++  private string $baseImageDir;
++  private string $resizedDir;
++  private string $defaultEngine;
++  private int $defaultQuality;
++  private string $defaultFit;
++  private string $adminToken;
++
++  public function __construct(array $data) {
++    $this->data = $data;
++    $this->baseImageDir   = rtrim($data['BASE_IMAGE_DIR'] ?? (__DIR__ . '/../../images'), '/');
++    $this->resizedDir     = rtrim($data['RESIZED_DIR']     ?? (__DIR__ . '/../../public/resized'), '/');
++    $this->defaultEngine  = $data['DEFAULT_ENGINE']  ?? 'gd';
++    $this->defaultQuality = (int)($data['DEFAULT_QUALITY'] ?? 82);
++    $this->defaultFit     = $data['DEFAULT_FIT']     ?? 'contain';
++    $this->adminToken     = $data['ADMIN_TOKEN']     ?? '';
++  }
++
++  /** Raw access if you really need it */
++  public function get(string $key, mixed $default = null): mixed {
++    return $this->data[$key] ?? $default;
++  }
++
++  public function baseImageDir(): string { return $this->baseImageDir; }
++  public function resizedDir(): string { return $this->resizedDir; }
++  public function defaultEngine(): string { return $this->defaultEngine; }
++  public function defaultQuality(): int { return $this->defaultQuality; }
++  public function defaultFit(): string { return $this->defaultFit; }
++  public function adminToken(): string { return $this->adminToken; }
++}
+*** End Patch
+
+*** Begin Patch
+*** Update File: public/index.php
+@@
+ use Slim\Factory\AppFactory;
+ use Dotenv\Dotenv;
+ use App\Support\Config;
+ use App\Controllers\ResizeController;
+-use App\Controllers\ClearController;
++use App\Controllers\ClearController;
+@@
+-$config = new Config([
+-  'BASE_IMAGE_DIR' => $_ENV['BASE_IMAGE_DIR'] ?? (__DIR__.'/../images'),
+-  'RESIZED_DIR'    => $_ENV['RESIZED_DIR']    ?? (__DIR__.'/resized'),
+-  'DEFAULT_ENGINE' => $_ENV['DEFAULT_ENGINE'] ?? 'gd',
+-  'DEFAULT_QUALITY'=> (int)($_ENV['DEFAULT_QUALITY'] ?? 82),
+-  'DEFAULT_FIT'    => $_ENV['DEFAULT_FIT'] ?? 'contain',
+-  'ADMIN_TOKEN'    => $_ENV['ADMIN_TOKEN'] ?? ''
+-]);
+-
+-if (!is_dir($config->resizedDir)) { @mkdir($config->resizedDir, 0777, true); }
++$config = new Config([
++  'BASE_IMAGE_DIR'  => $_ENV['BASE_IMAGE_DIR']  ?? (__DIR__ . '/../images'),
++  'RESIZED_DIR'     => $_ENV['RESIZED_DIR']     ?? (__DIR__ . '/resized'),
++  'DEFAULT_ENGINE'  => $_ENV['DEFAULT_ENGINE']  ?? 'gd',
++  'DEFAULT_QUALITY' => (int)($_ENV['DEFAULT_QUALITY'] ?? 82),
++  'DEFAULT_FIT'     => $_ENV['DEFAULT_FIT']     ?? 'contain',
++  'ADMIN_TOKEN'     => $_ENV['ADMIN_TOKEN']     ?? ''
++]);
++
++if (!is_dir($config->resizedDir())) { @mkdir($config->resizedDir(), 0777, true); }
+*** End Patch
+PATCH
+
+*** Begin Patch
+*** Update File: src/Controllers/ResizeController.php
+@@
+   public function handle(Request $req, Response $res, array $args): Response {
+     $q = $req->getQueryParams();
+     $rel = $args['path'] ?? '';
+-    $engine = $q['engine'] ?? $this->config->data['DEFAULT_ENGINE'];
++    $engine = $q['engine'] ?? $this->config->defaultEngine();
+
+     $opts = [
+-      'w' => isset($q['w']) ? (int)$q['w'] : null,
+-      'h' => isset($q['h']) ? (int)$q['h'] : null,
+-      'fit' => $q['fit'] ?? $this->config->data['DEFAULT_FIT'],
++      'w' => isset($q['w']) ? (int)$q['w'] : null,
++      'h' => isset($q['h']) ? (int)$q['h'] : null,
++      'fit' => $q['fit'] ?? $this->config->defaultFit(),
+       'fmt' => $q['fmt'] ?? $this->negotiateFormat($req, $q),
+-      'q'   => isset($q['q']) ? (int)$q['q'] : (int)$this->config->data['DEFAULT_QUALITY'],
++      'q'   => isset($q['q']) ? (int)$q['q'] : $this->config->defaultQuality(),
+     ];
+
+-    $svc = new ImageService($this->config->data['BASE_IMAGE_DIR'], $this->config->data['RESIZED_DIR'], $engine);
++    $svc = new ImageService($this->config->baseImageDir(), $this->config->resizedDir(), $engine);
+     $key = $svc->cacheKey($rel, $opts);
+     $cached = $svc->cachedPath($key);
+
+     if (is_file($cached)) {
+       return $this->sendFile($res, $cached, $opts['fmt']);
+     }
+
+-    $src = PathGuard::resolve($this->config->data['BASE_IMAGE_DIR'], $rel);
++    $src = PathGuard::resolve($this->config->baseImageDir(), $rel);
+     $engineImpl = $svc->pickEngine($engine);
+     $result = $engineImpl->resize($src, $opts);
+
+     file_put_contents($cached, $result['data']);
+     return $this->sendFile($res, $cached, $opts['fmt']);
+   }
+@@
+-    // If Nginx internal redirect is configured:
+-    $docRoot = realpath($this->config->data['RESIZED_DIR']);
++    // If Nginx internal redirect is configured:
++    $docRoot = realpath($this->config->resizedDir());
+*** End Patch
+PATCH
+
+*** Begin Patch
+*** Update File: src/Controllers/ClearController.php
+@@
+   public function clear(Request $req, Response $res): Response {
+     $token = $req->getHeaderLine('X-Admin-Token'); // keep header name for now
+-    if (!$token || $token !== ($this->config->data['ADMIN_TOKEN'] ?? '')) {
++    if (!$token || $token !== $this->config->adminToken()) {
+       $res->getBody()->write(json_encode(['error'=>'unauthorized']));
+       return $res->withStatus(401)->withHeader('Content-Type','application/json');
+     }
+@@
+-    $dir = rtrim($this->config->data['RESIZED_DIR'], '/');
++    $dir = rtrim($this->config->resizedDir(), '/');
+*** End Patch
+PATCH
+

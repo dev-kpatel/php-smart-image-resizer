@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 namespace App\Controllers;
 
 use Psr\Http\Message\ResponseInterface as Response;
@@ -13,17 +15,17 @@ final class ResizeController {
   public function handle(Request $req, Response $res, array $args): Response {
     $q = $req->getQueryParams();
     $rel = $args['path'] ?? '';
-    $engine = $q['engine'] ?? $this->config->data['DEFAULT_ENGINE'];
+    $engine = $q['engine'] ?? $this->config->defaultEngine();
 
     $opts = [
       'w' => isset($q['w']) ? (int)$q['w'] : null,
       'h' => isset($q['h']) ? (int)$q['h'] : null,
-      'fit' => $q['fit'] ?? $this->config->data['DEFAULT_FIT'],
+      'fit' => $q['fit'] ?? $this->config->defaultFit(),
       'fmt' => $q['fmt'] ?? $this->negotiateFormat($req, $q),
-      'q'   => isset($q['q']) ? (int)$q['q'] : (int)$this->config->data['DEFAULT_QUALITY'],
+      'q'   => isset($q['q']) ? (int)$q['q'] : $this->config->defaultQuality(),
     ];
 
-    $svc = new ImageService($this->config->data['BASE_IMAGE_DIR'], $this->config->data['RESIZED_DIR'], $engine);
+    $svc = new ImageService($this->config->baseImageDir(), $this->config->resizedDir(), $engine);
     $key = $svc->cacheKey($rel, $opts);
     $cached = $svc->cachedPath($key);
 
@@ -31,7 +33,7 @@ final class ResizeController {
       return $this->sendFile($res, $cached, $opts['fmt']);
     }
 
-    $src = PathGuard::resolve($this->config->data['BASE_IMAGE_DIR'], $rel);
+    $src = PathGuard::resolve($this->config->baseImageDir(), $rel);
     $engineImpl = $svc->pickEngine($engine);
     $result = $engineImpl->resize($src, $opts);
 
@@ -47,7 +49,13 @@ final class ResizeController {
       ->withHeader('Cache-Control', 'public, max-age=31536000, immutable')
       ->withHeader('ETag', $etag);
 
-    // Conditional GET
+    // Optional: Nginx X-Accel-Redirect if configured
+    // $docRoot = realpath($this->config->resizedDir());
+    // if ($docRoot && str_starts_with(realpath($path), $docRoot)) {
+    //   $internalPath = '/resized/' . basename($path);
+    //   return $res->withHeader('X-Accel-Redirect', $internalPath);
+    // }
+
     $ifNoneMatch = $_SERVER['HTTP_IF_NONE_MATCH'] ?? '';
     if ($ifNoneMatch === $etag) {
       return $res->withStatus(304);

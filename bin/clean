@@ -1,0 +1,40 @@
+#!/usr/bin/env php
+<?php
+declare(strict_types=1);
+
+$opts = getopt('', ['days::', 'dir::', 'ext::', 'dry-run::', 'help::']);
+if (isset($opts['help'])) {
+  echo "Usage: bin/clean [--days=30] [--dir=public/resized] [--ext=jpg,webp,*] [--dry-run=1]\n";
+  exit(0);
+}
+
+$days   = isset($opts['days']) ? max(0, (int)$opts['days']) : 30;
+$dir    = $opts['dir'] ?? __DIR__ . '/../public/resized';
+$extArg = $opts['ext'] ?? '*';
+$dryRun = filter_var($opts['dry-run'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
+if (!is_dir($dir)) {
+  fwrite(STDERR, "Directory not found: $dir\n");
+  exit(1);
+}
+
+$now = time();
+$threshold = $now - ($days * 86400);
+$exts = $extArg === '*' ? ['*'] : array_map('trim', explode(',', $extArg));
+
+$deleted = 0; $scanned = 0;
+foreach ($exts as $ext) {
+  $glob = rtrim($dir, '/').'/'.($ext === '*' ? '*' : "*.$ext");
+  foreach (glob($glob) as $file) {
+    if (!is_file($file)) continue;
+    $scanned++;
+    $mtime = filemtime($file) ?: 0;
+    if ($mtime <= $threshold) {
+      echo ($dryRun ? '[DRY] would delete ' : 'deleting ').$file.PHP_EOL;
+      if (!$dryRun) @unlink($file);
+      $deleted++;
+    }
+  }
+}
+
+echo json_encode(['dir'=>$dir,'days'=>$days,'dry_run'=>$dryRun,'scanned'=>$scanned,'deleted'=>$deleted], JSON_PRETTY_PRINT).PHP_EOL;

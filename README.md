@@ -1,12 +1,12 @@
 # Smart Image Resizer & CDN Helper (Slim 4)
 
-Resize, cache, and serve images fast with **Slim 4**. Two processing engines are available, immutable caching is built-in, and you get **WebP** + **progressive JPEG** out of the box.
+Resize, cache, and serve images fast with **Slim 4**. Uses DI (PHP-DI), Actions, and a clean module layout. Two processing engines are available, immutable caching is built-in, and you get **WebP** + **progressive JPEG** out of the box.
 
 ---
 
 ## Features
 - **Two engines**
-  - **gd (native):** `imagecreatefrom*`, `imagecopyresampled`, **progressive JPEG**, **WebP**
+  - **gd (native):** `imagecreatefrom*`, `imagecopyresampled`, **progressive JPEG**, **WebP`
   - **lib (Intervention v3):** cleaner API, auto-orient, sharpening, WebP/JPEG (GD or Imagick backend)
 - **Deterministic disk cache** in `public/resized/` (gitignored)
 - **Long-term caching** (`Cache-Control: immutable`, `ETag`, 304 support)
@@ -14,6 +14,7 @@ Resize, cache, and serve images fast with **Slim 4**. Two processing engines are
 - **Secure clear endpoint** (token)
 - **CLI cleaner** to purge old files
 - **PHP `srcset` helper** for responsive images
+- **DI & layers**: `@common` (shared Middleware/Handlers/Settings/Actions), `app/` (settings + container), `src/` (domain code)
 
 ---
 
@@ -27,9 +28,12 @@ Resize, cache, and serve images fast with **Slim 4**. Two processing engines are
 ## Quickstart
 ```bash
 composer install
-cp config/app.example.env .env     # set BASE_IMAGE_DIR, RESIZED_DIR, ADMIN_TOKEN
-composer start                     # http://localhost:8080
+cp config/app.example.env config/.env     # set BASE_IMAGE_DIR, RESIZED_DIR, ADMIN_TOKEN
+composer start                             # http://localhost:8090
 ```
+**Entry points**
+- Front controller: `public/index.php`
+- Routes: `app/routes.php`
 
 ### `.env` keys
 ```
@@ -83,7 +87,7 @@ Body (JSON):
 
 **Example**
 ```bash
-curl -X POST http://localhost:8080/cache/clear   -H "Content-Type: application/json"   -H "X-Admin-Token: $ADMIN_TOKEN"   -d '{ "pattern": "hero.jpg", "dry_run": true }'
+curl -X POST http://localhost:8090/cache/clear   -H "Content-Type: application/json"   -H "X-Admin-Token: $ADMIN_TOKEN"   -d '{ "pattern": "hero.jpg", "dry_run": true }'
 ```
 
 > Keep the token secret; rotate via `.env` when needed.
@@ -91,7 +95,7 @@ curl -X POST http://localhost:8080/cache/clear   -H "Content-Type: application/j
 ---
 
 ## PHP helper: generate `srcset`
-Use this helper to emit `src`, `srcset`, and `sizes` for responsive `<img>` tags backed by `/resize`.
+Use the helper to emit `src`, `srcset`, and `sizes` for responsive `<img>` tags backed by `/resize`.
 
 ```php
 use App\Support\Srcset;
@@ -138,68 +142,71 @@ chmod +x bin/clean
 10 2 1 * * /path/to/project/bin/clean --days=30 >> /var/log/image-cache-clean.log 2>&1
 ```
 
-**Composer script** (already added):
+**Composer script**:
 ```bash
 composer clean-cache
 ```
 
-### B) `bin/clear` — alias for the cleaner (optional)
-If you prefer the command to be called `bin/clear`, use either method:
+> Prefer the CLI for **age-based purges**. Use the HTTP route for **pattern-based deletes**.
 
-**Option 1 — file alias**
-```bash
-cp bin/clean bin/clear
-chmod +x bin/clear
-# usage:
-./bin/clear --days=30 --dry-run=1
+---
+
+## Nginx optimization (optional)
+Serve cached files with zero-copy using **X-Accel-Redirect**:
+
+```nginx
+location ^~ /resized/ {
+  internal;
+  alias /absolute/path/to/project/public/resized/;
+  etag on;
+  add_header Cache-Control "public, max-age=31536000, immutable";
+}
+
+location / {
+  try_files $uri /index.php?$query_string;
+}
 ```
 
-**Option 2 — Composer alias**
-Add to `composer.json` → `"scripts"`:
-```json
-"clear-cache": "php bin/clean --days=30"
-```
-Then run:
-```bash
-composer clear-cache
-```
-
-> **Difference:**
-> • `bin/clean` / `bin/clear` = **age-based purge (local filesystem)**
-> • `POST /cache/clear` = **pattern-based deletion via HTTP**
+(Enable the internal redirect in your action so PHP sets headers while Nginx streams the file.)
 
 ---
 
 ## Project structure (abridged)
 ```
+app/
+  dependencies.php
+  routes.php
+  settings.php
+@common/            # shared
+  Actions/
+  Handlers/
+  Middleware/
+  ResponseEmitter/
+  Settings/
+images/
 public/
   index.php
-  resized/           # generated
+  resized/            # generated
 src/
-  Controllers/
-    ResizeController.php
-    ClearController.php
+  Actions/
+    Image/
+      ResizeAction.php
+      ClearAction.php
   Engines/
-    ImageEngine.php
-    GDNativeEngine.php
-    InterventionEngine.php
   Services/
-    ImageService.php
   Support/
-    Config.php
-    PathGuard.php
-    Srcset.php
 bin/
   clean
 config/
   app.example.env
+  .env
 ```
 
 ---
 
 ## Notes
 - Use **`fmt`** explicitly for predictable formats, or omit to rely on `Accept` negotiation (prefers WebP).
-- If using **Intervention** with Imagick, switch driver to `'imagick'` in `InterventionEngine`.
+- If using **Intervention** with Imagick, switch driver to `'imagick'` in your engine.
 - Add **AVIF** later by extending engines (Imagick + libheif, or external encoder).
 - For large deployments, consider sharding `public/resized/` into subfolders.
 

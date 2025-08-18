@@ -1,30 +1,31 @@
 <?php
 declare(strict_types=1);
 
-namespace App\Controllers;
+namespace App\Actions\Image;
 
 use Psr\Http\Message\ResponseInterface as Response;
-use Psr\Http\Message\ServerRequestInterface as Request;
-use App\Support\Config;
 
-final class ClearController {
-  public function __construct(private Config $config) {}
+final class ClearAction extends ImageAction
+{
 
-  public function clear(Request $req, Response $res): Response {
-    $token = $req->getHeaderLine('X-Admin-Token');
+   /**
+   * {@inheritdoc}
+   */
+  protected function action(): Response
+  {
+    $token = $this->request->getHeader('X-Admin-Token')[0];
+
     if (!$token || $token !== $this->config->adminToken()) {
-      $res->getBody()->write(json_encode(['error'=>'unauthorized']));
-      return $res->withStatus(401)->withHeader('Content-Type','application/json');
+      return $this->respondWithData(['error'=>'unauthorized'])->withStatus(401);
     }
 
-    $payload = (array)$req->getParsedBody();
+    $payload = $this->getFormData();
     $pattern = trim((string)($payload['pattern'] ?? ''));
     $dryRun  = filter_var($payload['dry_run'] ?? false, FILTER_VALIDATE_BOOLEAN);
 
     $dir = rtrim($this->config->resizedDir(), '/');
     if (!is_dir($dir)) {
-      $res->getBody()->write(json_encode(['status'=>'ok','deleted'=>0,'message'=>'no cache dir']));
-      return $res->withHeader('Content-Type','application/json');
+        return $this->respondWithData(['status'=>'ok','deleted'=>0,'message'=>'no cache dir']);
     }
 
     $deleted = 0; $scanned = 0;
@@ -37,9 +38,8 @@ final class ClearController {
       $deleted++;
     }
 
-    $res->getBody()->write(json_encode([
+    return $this->respondWithData([
       'status'=>'ok','scanned'=>$scanned,'deleted'=>$deleted,'dry_run'=>$dryRun,'pattern'=>$pattern ?: null
-    ]));
-    return $res->withHeader('Content-Type','application/json');
+    ]);
   }
 }

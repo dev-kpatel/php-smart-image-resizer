@@ -1,0 +1,42 @@
+<?php
+
+declare(strict_types=1);
+
+use Common\Settings\SettingsInterface;
+use DI\ContainerBuilder;
+use Monolog\Handler\StreamHandler;
+use Monolog\Logger;
+use Monolog\Processor\UidProcessor;
+use Psr\Container\ContainerInterface;
+use Psr\Log\LoggerInterface;
+use App\Support\Config;
+
+return function (ContainerBuilder $containerBuilder) {
+    $containerBuilder->addDefinitions([
+        LoggerInterface::class => function (ContainerInterface $c) {
+            $settings = $c->get(SettingsInterface::class);
+
+            $loggerSettings = $settings->get('logger');
+            $logger = new Logger($loggerSettings['name']);
+
+            $processor = new UidProcessor();
+            $logger->pushProcessor($processor);
+
+            // Ensure log directory exists if you use a file path
+            if (!str_starts_with((string)$loggerSettings['path'], 'php://')) {
+                @mkdir(dirname($loggerSettings['path']), 0777, true);
+            }
+
+            $handler = new StreamHandler($loggerSettings['path'], $loggerSettings['level']);
+            $logger->pushHandler($handler);
+
+            return $logger;
+        },
+
+        // Typed binding only (no string alias)
+        Config::class => function (ContainerInterface $c) {
+            $settings = $c->get(SettingsInterface::class);
+            return new Config($settings->get('config'));
+        },
+    ]);
+};

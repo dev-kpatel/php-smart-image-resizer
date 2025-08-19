@@ -1,5 +1,5 @@
 {
-  "name": "krunal/php-smart-image-resizer",
+  "name": "dev-kpatel/php-smart-image-resizer",
   "type": "project",
   "require": {
     "php": "^8.2",
@@ -16,8 +16,18 @@
       "App\\": "src/"
    }
   },
+  "autoload-dev": {
+    "psr-4": {
+      "Tests\\": "tests/"
+    }
+  },
   "scripts": {
     "start": "php -S localhost:8090 -t public",
-    "clean-cache": "php bin/clean --days=30"
+    "clean-cache": "php bin/clean --days=30",
+    "test": "php -d zend.exception_ignore_args=0 vendor/bin/phpunit"
+  },
+
+  "require-dev": {
+    "phpunit/phpunit": "^11"
   }
 }

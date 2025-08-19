@@ -80,13 +80,12 @@ final class ResizeAction extends ImageAction
 
   private function negotiateFormat(array $q): string
   {
-    if (!empty($q['fmt'])) {
-      return $q['fmt'];
-    }
-    $accept = $this->request->getHeader('Accept')[0];
-    if (stripos($accept, 'image/webp') !== false) {
-      return 'webp';
-    }
-    return 'jpg';
+      if (!empty($q['fmt'])) {
+          return $q['fmt'];
+      }
+      // getHeaderLine() returns '' when the header is missing — safe for stripos()
+      $accept = $this->request->getHeaderLine('Accept'); // '' if missing
+      return (stripos($accept, 'image/webp') !== false) ? 'webp' : 'jpg';
   }
+
 }

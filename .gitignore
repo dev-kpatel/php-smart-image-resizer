@@ -3,4 +3,5 @@
 /public/resized/
 /.idea/
 /.vscode
+/*.patch
 .DS_Store

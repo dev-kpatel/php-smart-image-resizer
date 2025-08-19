@@ -20,9 +20,8 @@ return function (App $app) {
         return $response;
     });
 
-    $app->get('/resize/{path:.*}', ResizeAction::class); //Done and Tested
-    $app->post('/cache/clear',  ClearAction::class); //Done and Tested
-    $app->post('/cache/clear',  ClearAction::class); //Done and Tested
+    $app->get('/resize/{path:.*}', ResizeAction::class);
+    $app->post('/cache/clear',  ClearAction::class);
     $app->get('/healthz', function ($req, $res) {
     $res = $res->withHeader('Content-Type', 'application/json');
         $res->getBody()->write(json_encode(['ok' => true]));

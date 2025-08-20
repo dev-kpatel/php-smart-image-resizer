@@ -13,11 +13,11 @@ RUN apk add --no-cache \
     && docker-php-ext-configure gd --with-jpeg --with-freetype --with-webp \
     && docker-php-ext-install -j$(nproc) gd opcache
 
-WORKDIR /var/www/html
+WORKDIR /app
 
 # Copy app code and vendor
-COPY . /var/www/html
-COPY --from=vendor /app/vendor /var/www/html/vendor
+COPY . .
+COPY --from=vendor /app/vendor ./vendor
 
 # Defaults (override at runtime)
 ENV APP_ENV=production \
